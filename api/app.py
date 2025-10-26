@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
@@ -32,6 +32,8 @@ import threading
 _model_lock = threading.Lock()
 _tts_model = None
 _TTS_READY = False
+_whisper_model = None
+_WHISPER_READY = False
 
 def load_tts_model():
     """Carrega o modelo TTS apenas uma vez (thread-safe)"""
@@ -45,17 +47,39 @@ def load_tts_model():
         try:
             from TTS.api import TTS
             _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
-            print("✅ Modelo carregado!")
+            print("✅ Modelo TTS carregado!")
             _TTS_READY = True
         except Exception as e:
-            print(f"⚠️ Erro ao carregar modelo: {e}")
+            print(f"⚠️ Erro ao carregar modelo TTS: {e}")
             _TTS_READY = False
         
         return _tts_model
 
-# Pre-carregar modelo
+def load_whisper_model():
+    """Carrega o modelo Whisper para transcrição (lazy loading)"""
+    global _whisper_model, _WHISPER_READY
+    
+    with _model_lock:
+        if _whisper_model is not None:
+            return _whisper_model
+        
+        print("🔄 Carregando modelo Whisper...")
+        try:
+            import whisper
+            _whisper_model = whisper.load_model("base")
+            print("✅ Modelo Whisper carregado!")
+            _WHISPER_READY = True
+        except Exception as e:
+            print(f"⚠️ Erro ao carregar modelo Whisper: {e}")
+            _WHISPER_READY = False
+        
+        return _whisper_model
+
+# Pre-carregar modelos
 tts_model = load_tts_model()
 TTS_READY = _TTS_READY
+whisper_model = load_whisper_model()
+WHISPER_READY = _WHISPER_READY
 
 
 class AudioRequest(BaseModel):
@@ -76,6 +100,15 @@ class AudioResponse(BaseModel):
     size_kb: Optional[float] = None
 
 
+class TranscribeResponse(BaseModel):
+    """Response model para transcrição de áudio"""
+    success: bool
+    message: str
+    text: Optional[str] = None
+    language: Optional[str] = None
+    duration: Optional[float] = None
+
+
 @app.get("/")
 async def root():
     """Endpoint raiz"""
@@ -85,6 +118,7 @@ async def root():
         "endpoints": {
             "health": "/health",
             "generate": "/generate (POST)",
+            "transcribe": "/transcribe (POST)",
             "list": "/list",
             "docs": "/docs"
         }
@@ -97,6 +131,7 @@ async def health():
     return {
         "status": "healthy",
         "tts_ready": TTS_READY,
+        "whisper_ready": WHISPER_READY,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -217,6 +252,87 @@ async def download_audio(filename: str):
         filename=filename,
         media_type="audio/wav"
     )
+
+
+@app.post("/transcribe", response_model=TranscribeResponse)
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    language: Optional[str] = "pt"
+):
+    """
+    Transcrever áudio em texto
+    
+    Args:
+        file: Arquivo de áudio para transcrever
+        language: Idioma do áudio (pt, en, es, etc.)
+    
+    Returns:
+        TranscribeResponse com o texto transcrito
+    """
+    # Carregar modelo se necessário
+    current_model = load_whisper_model()
+    
+    if not WHISPER_READY:
+        raise HTTPException(
+            status_code=503,
+            detail="Whisper não está pronto. Verifique os logs."
+        )
+    
+    try:
+        # Validar tipo de arquivo
+        allowed_extensions = {'.mp3', '.wav', '.m4a', '.flac', '.ogg', '.webm'}
+        file_ext = Path(file.filename).suffix.lower()
+        
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Formato de arquivo não suportado: {file_ext}. Use: {allowed_extensions}"
+            )
+        
+        # Salvar arquivo temporário
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        temp_filename = f"upload_{timestamp}{file_ext}"
+        temp_filepath = UPLOAD_DIR / temp_filename
+        
+        # Salvar conteúdo do arquivo
+        with open(temp_filepath, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        print(f"\n📝 Transcrevendo áudio...")
+        print(f"   Arquivo: {file.filename}")
+        print(f"   Idioma: {language}")
+        
+        # Transcrever áudio
+        result = current_model.transcribe(
+            str(temp_filepath),
+            language=language if language != "auto" else None
+        )
+        
+        # Limpar arquivo temporário
+        if temp_filepath.exists():
+            temp_filepath.unlink()
+        
+        # Extrair informações
+        transcribed_text = result["text"].strip()
+        detected_language = result.get("language", language)
+        duration = sum(segment.get("end", 0) - segment.get("start", 0) 
+                      for segment in result.get("segments", []))
+        
+        return TranscribeResponse(
+            success=True,
+            message="✅ Áudio transcrito com sucesso",
+            text=transcribed_text,
+            language=detected_language,
+            duration=round(duration, 2)
+        )
+    
+    except Exception as e:
+        print(f"❌ Erro: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao transcrever áudio: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

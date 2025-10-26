@@ -5,6 +5,7 @@ Testes para a API de Clonagem de Voz
 
 import requests
 import json
+import sys
 
 BASE_URL = "http://localhost:8000"
 
@@ -54,6 +55,39 @@ def test_list():
         for file in result['files'][:5]:  # Mostrar apenas 5
             print(f"  - {file['filename']} ({file['size_kb']} KB)")
 
+def test_transcribe(audio_file=None):
+    """Testar transcrição de áudio"""
+    print("\n🔍 Testando /transcribe...")
+    
+    if not audio_file:
+        print("⚠️  Nenhum arquivo de áudio fornecido")
+        print("   Uso: python test_api.py audio.mp3")
+        return
+    
+    import os
+    if not os.path.exists(audio_file):
+        print(f"❌ Arquivo não encontrado: {audio_file}")
+        return
+    
+    try:
+        with open(audio_file, "rb") as f:
+            response = requests.post(
+                f"{BASE_URL}/transcribe",
+                files={"file": f},
+                data={"language": "pt"}
+            )
+        
+        print(f"Status: {response.status_code}")
+        result = response.json()
+        print(f"Response: {json.dumps(result, indent=2)}")
+        
+        if result.get("success"):
+            print(f"\n✅ Transcrição: {result['text']}")
+            print(f"   Idioma: {result.get('language', 'N/A')}")
+            print(f"   Duração: {result.get('duration', 'N/A')} segundos")
+    except Exception as e:
+        print(f"❌ Erro ao transcrever: {e}")
+
 if __name__ == "__main__":
     print("="*60)
     print("🧪 TESTES DA API")
@@ -67,9 +101,14 @@ if __name__ == "__main__":
         print("Execute: python api/app.py")
         exit(1)
     
-    test_health()
-    test_generate()
-    test_list()
+    # Se foi fornecido um arquivo de áudio como argumento
+    if len(sys.argv) > 1:
+        audio_file = sys.argv[1]
+        test_transcribe(audio_file)
+    else:
+        test_health()
+        test_generate()
+        test_list()
     
     print("\n✅ Testes concluídos!")
 
