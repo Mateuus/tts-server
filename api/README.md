@@ -65,7 +65,7 @@ Gera áudio com clonagem de voz
 - `speed`: Velocidade do áudio (0.95 = padrão)
 - `output_filename`: Nome do arquivo de saída (opcional)
 - `return_base64`: Retornar áudio em base64 (padrão: false)
-- `banned_words`: Palavras banidas separadas por vírgula - serão substituídas por # antes de gerar áudio
+- `banned_words`: Palavras banidas separadas por vírgula - serão REMOVIDAS do texto antes de gerar áudio (não substituídas por #)
 
 **Response com base64 (quando `return_base64: true`):**
 ```json
