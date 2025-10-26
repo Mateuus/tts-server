@@ -116,7 +116,9 @@ curl -X POST http://localhost:8000/filter \
 **Parâmetros:**
 - `file`: Arquivo de áudio (mp3, wav, m4a, flac, ogg, webm)
 - `language`: Idioma do áudio (pt, en, es, etc.) - padrão: pt
-- `banned_words`: Lista personalizada de palavras banidas (opcional)
+- `banned_words`: Palavras banidas separadas por vírgula (opcional)
+  - Exemplo: `"clonagem,Open Voice"`
+  - Se não fornecido, usa as palavras padrão
 
 **Nota:** O áudio filtrado terá beeps adicionados onde palavras banidas foram detectadas e o texto terá `#` substituindo as palavras banidas.
 
@@ -136,10 +138,16 @@ curl -X POST http://localhost:8000/transcribe \
   -F "file=@audio.mp3" \
   -F "language=pt"
 
-# Filtrar áudio
+# Filtrar áudio (usa palavras padrão)
 curl -X POST http://localhost:8000/filter \
   -F "file=@audio.mp3" \
   -F "language=pt"
+
+# Filtrar áudio com palavras personalizadas
+curl -X POST http://localhost:8000/filter \
+  -F "file=@audio.mp3" \
+  -F "language=pt" \
+  -F "banned_words=palavra1,palavra2,palavra3"
 ```
 
 ## 📁 Estrutura
@@ -194,12 +202,25 @@ with open("audio.mp3", "rb") as f:
 result = response.json()
 print(f"Texto: {result['text']}")
 
-# Filtrar áudio
+# Filtrar áudio (com palavras padrão)
 with open("audio.mp3", "rb") as f:
     response = requests.post(
         "http://localhost:8000/filter",
         files={"file": f},
         data={"language": "pt"}
+    )
+result = response.json()
+print(f"Texto filtrado: {result['text']}")
+
+# Filtrar áudio com palavras personalizadas
+with open("audio.mp3", "rb") as f:
+    response = requests.post(
+        "http://localhost:8000/filter",
+        files={"file": f},
+        data={
+            "language": "pt",
+            "banned_words": "palavra1,palavra2,palavra3"
+        }
     )
 result = response.json()
 print(f"Texto filtrado: {result['text']}")

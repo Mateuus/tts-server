@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
@@ -272,8 +272,8 @@ async def download_audio(filename: str):
 @app.post("/filter", response_model=CensorResponse)
 async def filter_audio(
     file: UploadFile = File(...),
-    language: Optional[str] = "pt",
-    banned_words: Optional[list] = None
+    language: Optional[str] = Form("pt"),
+    banned_words: Optional[str] = Form(None)
 ):
     """
     Filtrar palavras banidas em áudio
@@ -281,13 +281,18 @@ async def filter_audio(
     Args:
         file: Arquivo de áudio para filtrar
         language: Idioma do áudio (pt, en, es, etc.)
-        banned_words: Lista de palavras banidas (opcional, usa padrão se não fornecido)
+        banned_words: Palavras banidas separadas por vírgula (opcional, usa padrão se não fornecido)
+                      Exemplo: "clonagem,Open Voice"
     
     Returns:
         CensorResponse com o áudio filtrado e texto com # substituindo palavras banidas
     """
-    # Usar palavras banidas fornecidas ou padrão
-    words_to_censor = banned_words or BANNED_WORDS
+    # Processar palavras banidas
+    if banned_words:
+        # Converter string separada por vírgulas em lista
+        words_to_censor = [word.strip() for word in banned_words.split(",") if word.strip()]
+    else:
+        words_to_censor = BANNED_WORDS
     
     # Carregar modelo se necessário
     current_model = load_whisper_model()
