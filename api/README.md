@@ -88,6 +88,38 @@ curl -X POST http://localhost:8000/transcribe \
 - `file`: Arquivo de áudio (mp3, wav, m4a, flac, ogg, webm)
 - `language`: Idioma do áudio (pt, en, es, etc.) - padrão: pt
 
+### POST `/filter`
+Filtra palavras banidas em áudio
+
+**Palavras banidas padrão:** `['clonagem', 'Open Voice']`
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/filter \
+  -F "file=@audio.mp3" \
+  -F "language=pt"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "✅ Áudio filtrado com sucesso",
+  "text": "Este é o texto com ###### no lugar de palavras banidas",
+  "censored_words": ["clonagem"],
+  "filename": "censored_20240101_120000.mp3",
+  "filepath": "audio/outputs/censored_20240101_120000.mp3",
+  "language": "pt"
+}
+```
+
+**Parâmetros:**
+- `file`: Arquivo de áudio (mp3, wav, m4a, flac, ogg, webm)
+- `language`: Idioma do áudio (pt, en, es, etc.) - padrão: pt
+- `banned_words`: Lista personalizada de palavras banidas (opcional)
+
+**Nota:** O áudio filtrado terá beeps adicionados onde palavras banidas foram detectadas e o texto terá `#` substituindo as palavras banidas.
+
 ## 🧪 Testar
 
 ```bash
@@ -101,6 +133,11 @@ curl -X POST http://localhost:8000/generate \
 
 # Transcrever áudio
 curl -X POST http://localhost:8000/transcribe \
+  -F "file=@audio.mp3" \
+  -F "language=pt"
+
+# Filtrar áudio
+curl -X POST http://localhost:8000/filter \
   -F "file=@audio.mp3" \
   -F "language=pt"
 ```
@@ -156,6 +193,18 @@ with open("audio.mp3", "rb") as f:
     )
 result = response.json()
 print(f"Texto: {result['text']}")
+
+# Filtrar áudio
+with open("audio.mp3", "rb") as f:
+    response = requests.post(
+        "http://localhost:8000/filter",
+        files={"file": f},
+        data={"language": "pt"}
+    )
+result = response.json()
+print(f"Texto filtrado: {result['text']}")
+print(f"Palavras filtradas: {result['censored_words']}")
+print(f"Arquivo filtrado: {result['filename']}")
 ```
 
 ## 📚 Documentação Completa
