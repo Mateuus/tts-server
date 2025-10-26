@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  tts-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: coqui-tts-cpu
+    volumes:
+      - ./models:/app/models
+      - ./audio:/app/audio
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  tts-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: coqui-tts-gpu
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - ./models:/app/models
+      - ./audio:/app/audio
+    ports:
+      - "5001:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+    restart: unless-stopped
+

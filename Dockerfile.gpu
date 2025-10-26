@@ -1,0 +1,32 @@
+# Dockerfile para Coqui TTS com suporte GPU (CUDA)
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Instalar Python e dependências
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    build-essential \
+    curl \
+    libsndfile1 \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configurar diretório de trabalho
+WORKDIR /app
+
+# Copiar requirements (se existir)
+COPY requirements.txt ./
+
+# Instalar Coqui TTS com suporte GPU
+RUN pip3 install --upgrade pip && \
+    pip3 install TTS
+
+# Criar diretório para armazenar arquivos de áudio
+RUN mkdir -p /app/audio
+
+# Expor porta para API
+EXPOSE 5000
+
+# Comando padrão - manter container vivo
+CMD ["tail", "-f", "/dev/null"]
+

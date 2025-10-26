@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+ENV/
+
+# TTS specific
+models/
+*.wav
+*.mp3
+!audio/README.md
+
+# Cache
+.cache/
+*.cache
+.huggingface/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes
+audio/outputs/
+audio/uploads/
+
+# Environment
+.env
+.env.local
+
+# Checkpoints e modelos grandes
+*.pth
+*.ckpt
+checkpoints/
+
