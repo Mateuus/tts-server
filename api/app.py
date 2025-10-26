@@ -194,27 +194,19 @@ async def generate_audio(request: AudioRequest):
             # Converter string separada por vírgulas em lista
             words_to_filter = [word.strip() for word in request.banned_words.split(",") if word.strip()]
             
-            # Filtrar palavras banidas no texto - REMOVER ao invés de substituir por #
+            # Filtrar palavras banidas no texto - SUBSTITUIR por "Hashtag"
             for banned_word in words_to_filter:
                 pattern = re.compile(re.escape(banned_word), re.IGNORECASE)
                 matches = list(pattern.finditer(text_to_generate))
                 
                 if matches:
-                    # Remover palavra completamente (não substituir por #)
+                    # Substituir palavra por "Hashtag" (TTS vai ler "Hashtag")
                     for match in reversed(matches):  # Reversed para não alterar índices
-                        # Remover palavra e espaços extras ao redor se existirem
-                        start = match.start()
-                        end = match.end()
-                        
-                        # Remover espaço antes se existir
-                        if start > 0 and text_to_generate[start-1] == ' ':
-                            start -= 1
-                        
-                        # Remover espaço depois se existir
-                        if end < len(text_to_generate) and text_to_generate[end] == ' ':
-                            end += 1
-                        
-                        text_to_generate = text_to_generate[:start] + text_to_generate[end:]
+                        text_to_generate = (
+                            text_to_generate[:match.start()] + 
+                            "Hashtag" + 
+                            text_to_generate[match.end():]
+                        )
                         filtered_words_found.append(match.group())
             
             if filtered_words_found:
