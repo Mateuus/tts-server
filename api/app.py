@@ -5,6 +5,7 @@ FastAPI para Geração de Áudio com Clonagem de Voz
 
 import os
 import sys
+import base64
 from pathlib import Path
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
@@ -92,6 +93,7 @@ class AudioRequest(BaseModel):
     language: str = "pt"
     speed: Optional[float] = 0.95
     output_filename: Optional[str] = None
+    return_base64: Optional[bool] = False
 
 
 class AudioResponse(BaseModel):
@@ -101,6 +103,7 @@ class AudioResponse(BaseModel):
     filename: Optional[str] = None
     filepath: Optional[str] = None
     size_kb: Optional[float] = None
+    base64: Optional[str] = None
 
 
 class TranscribeResponse(BaseModel):
@@ -121,6 +124,7 @@ class CensorResponse(BaseModel):
     filename: Optional[str] = None
     filepath: Optional[str] = None
     language: Optional[str] = None
+    base64: Optional[str] = None
 
 
 @app.get("/")
@@ -207,12 +211,20 @@ async def generate_audio(request: AudioRequest):
         if filepath.exists():
             size_kb = filepath.stat().st_size / 1024
             
+            # Converter para base64 se solicitado
+            base64_audio = None
+            if request.return_base64:
+                with open(filepath, "rb") as audio_file:
+                    audio_bytes = audio_file.read()
+                    base64_audio = base64.b64encode(audio_bytes).decode('utf-8')
+            
             return AudioResponse(
                 success=True,
                 message=f"✅ Áudio gerado com sucesso",
                 filename=filename,
                 filepath=str(filepath),
-                size_kb=round(size_kb, 2)
+                size_kb=round(size_kb, 2),
+                base64=base64_audio
             )
         else:
             raise HTTPException(
@@ -273,7 +285,8 @@ async def download_audio(filename: str):
 async def filter_audio(
     file: UploadFile = File(...),
     language: Optional[str] = Form("pt"),
-    banned_words: Optional[str] = Form(None)
+    banned_words: Optional[str] = Form(None),
+    return_base64: Optional[bool] = Form(False)
 ):
     """
     Filtrar palavras banidas em áudio
@@ -283,6 +296,7 @@ async def filter_audio(
         language: Idioma do áudio (pt, en, es, etc.)
         banned_words: Palavras banidas separadas por vírgula (opcional, usa padrão se não fornecido)
                       Exemplo: "clonagem,Open Voice"
+        return_base64: Retornar áudio em base64 (padrão: False)
     
     Returns:
         CensorResponse com o áudio filtrado e texto com # substituindo palavras banidas
@@ -434,6 +448,13 @@ async def filter_audio(
         
         detected_language = result.get("language", language)
         
+        # Converter para base64 se solicitado
+        base64_audio = None
+        if return_base64:
+            with open(censored_filepath, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+                base64_audio = base64.b64encode(audio_bytes).decode('utf-8')
+        
         return CensorResponse(
             success=True,
             message=f"✅ Áudio filtrado com sucesso" if censored_words_found else "✅ Áudio processado (nenhuma palavra banida encontrada)",
@@ -441,7 +462,8 @@ async def filter_audio(
             censored_words=censored_words_found if censored_words_found else [],
             filename=censored_filename,
             filepath=str(censored_filepath),
-            language=detected_language
+            language=detected_language,
+            base64=base64_audio
         )
     
     except Exception as e:

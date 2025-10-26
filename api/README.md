@@ -39,7 +39,8 @@ Gera áudio com clonagem de voz
   "voice_ref": "../audio/minha_voz.mp3",
   "language": "pt",
   "speed": 0.95,
-  "output_filename": "resultado.wav"
+  "output_filename": "resultado.wav",
+  "return_base64": false
 }
 ```
 
@@ -50,7 +51,20 @@ Gera áudio com clonagem de voz
   "message": "✅ Áudio gerado com sucesso",
   "filename": "resultado.wav",
   "filepath": "../audio/outputs/resultado.wav",
-  "size_kb": 123.45
+  "size_kb": 123.45,
+  "base64": null
+}
+```
+
+**Response com base64 (quando `return_base64: true`):**
+```json
+{
+  "success": true,
+  "message": "✅ Áudio gerado com sucesso",
+  "filename": "resultado.wav",
+  "filepath": "../audio/outputs/resultado.wav",
+  "size_kb": 123.45,
+  "base64": "UklGRiQAAAAAABKAAAAA..."
 }
 ```
 
@@ -62,6 +76,8 @@ Lista todos os áudios gerados
 
 ### GET `/audio/{filename}`
 Download de arquivo de áudio
+
+**Nota:** A partir de agora, os endpoints de geração (`/generate` e `/filter`) suportam retornar o áudio em **base64** diretamente na resposta, evitando a necessidade de salvar arquivos de output.
 
 ### POST `/transcribe`
 Transcreve áudio em texto (usando Whisper)
@@ -119,8 +135,29 @@ curl -X POST http://localhost:8000/filter \
 - `banned_words`: Palavras banidas separadas por vírgula (opcional)
   - Exemplo: `"clonagem,Open Voice"`
   - Se não fornecido, usa as palavras padrão
+- `return_base64`: Retornar áudio em base64 (padrão: false)
 
 **Nota:** O áudio filtrado terá beeps adicionados onde palavras banidas foram detectadas e o texto terá `#` substituindo as palavras banidas.
+
+**Exemplo com base64:**
+```bash
+curl -X POST http://localhost:8000/filter \
+  -F "file=@audio.mp3" \
+  -F "language=pt" \
+  -F "return_base64=true"
+```
+
+**Response com base64:**
+```json
+{
+  "success": true,
+  "message": "✅ Áudio filtrado com sucesso",
+  "text": "Texto com ######...",
+  "censored_words": ["clonagem"],
+  "filename": "censored_20240101_120000.mp3",
+  "base64": "UklGRiQAAAAAABKAAAAA..." // Áudio em base64
+}
+```
 
 ## 🧪 Testar
 
@@ -180,17 +217,36 @@ Ou use outro modelo:
 ```python
 import requests
 
-# Gerar áudio
+# Gerar áudio (sem base64)
 response = requests.post(
     "http://localhost:8000/generate",
     json={
         "text": "Seu texto aqui",
         "voice_ref": "../audio/minha_voz.mp3",
-        "speed": 0.95
+        "speed": 0.95,
+        "return_base64": False
     }
 )
 result = response.json()
 print(f"Arquivo: {result['filename']}")
+
+# Gerar áudio com base64
+response = requests.post(
+    "http://localhost:8000/generate",
+    json={
+        "text": "Seu texto aqui",
+        "voice_ref": "../audio/minha_voz.mp3",
+        "speed": 0.95,
+        "return_base64": True
+    }
+)
+result = response.json()
+if result['base64']:
+    import base64
+    audio_data = base64.b64decode(result['base64'])
+    with open('audio_output.wav', 'wb') as f:
+        f.write(audio_data)
+    print("Áudio salvo a partir de base64!")
 
 # Transcrever áudio
 with open("audio.mp3", "rb") as f:
@@ -226,6 +282,24 @@ result = response.json()
 print(f"Texto filtrado: {result['text']}")
 print(f"Palavras filtradas: {result['censored_words']}")
 print(f"Arquivo filtrado: {result['filename']}")
+
+# Filtrar áudio e obter base64
+with open("audio.mp3", "rb") as f:
+    response = requests.post(
+        "http://localhost:8000/filter",
+        files={"file": f},
+        data={
+            "language": "pt",
+            "return_base64": "true"
+        }
+    )
+result = response.json()
+if result['base64']:
+    import base64
+    audio_data = base64.b64decode(result['base64'])
+    with open('audio_filtrado.mp3', 'wb') as f:
+        f.write(audio_data)
+    print("Áudio filtrado salvo a partir de base64!")
 ```
 
 ## 📚 Documentação Completa
