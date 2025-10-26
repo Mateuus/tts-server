@@ -335,11 +335,29 @@ async def filter_audio(
             word_timestamps=True
         )
         
-        # Detectar palavras banidas
+        # Detectar palavras banidas com timestamps
         censored_info = []
+        censored_timestamps = []  # Para armazenar timestamps das palavras banidas
         text = result["text"].strip()
         
-        # Buscar por palavras banidas (case insensitive)
+        # Buscar palavras banidas nos segmentos usando timestamps
+        segments = result.get("segments", [])
+        for segment in segments:
+            words = segment.get("words", [])
+            for word_info in words:
+                word_text = word_info.get("word", "").strip().lower()
+                
+                # Verificar se a palavra está na lista de palavras banidas
+                for banned_word in words_to_censor:
+                    if banned_word.lower() in word_text:
+                        censored_timestamps.append({
+                            'start': word_info.get("start", 0),
+                            'end': word_info.get("end", 0),
+                            'word': word_info.get("word", "")
+                        })
+                        break
+        
+        # Buscar por palavras banidas no texto para censura de texto
         for word in words_to_censor:
             import re
             # Criar regex para encontrar a palavra (case insensitive)
@@ -384,11 +402,26 @@ async def filter_audio(
         # Gerar beep de 0.5s (1000Hz)
         beep = Sine(1000).to_audio_segment(duration=500).apply_gain(-5)
         
-        # Adicionar beeps onde necessário
-        if censored_info:
-            # Para simplificar, vamos adicionar um beep no final se houver palavras censuradas
-            # Em uma versão mais completa, seria necessário mapear palavras para timestamps exatos
-            audio = audio + beep + AudioSegment.silent(duration=200)
+        # Adicionar beeps nas posições exatas das palavras banidas
+        if censored_timestamps:
+            # Ordenar timestamps por posição no tempo (do fim para o início para evitar problemas de offset)
+            censored_timestamps.sort(key=lambda x: x['start'], reverse=True)
+            
+            for ts_info in censored_timestamps:
+                start_ms = int(ts_info['start'] * 1000)  # Converter segundos para milissegundos
+                end_ms = int(ts_info['end'] * 1000)
+                duration_ms = end_ms - start_ms
+                
+                # Garantir que não ultrapasse o tamanho do áudio
+                if start_ms < len(audio) and end_ms <= len(audio):
+                    # Dividir áudio em: início, palavra banida, fim
+                    audio_before = audio[:start_ms]
+                    audio_after = audio[end_ms:]
+                    
+                    # Substituir palavra banida por beep
+                    audio = audio_before + beep + AudioSegment.silent(duration=max(0, duration_ms - len(beep))) + audio_after
+                    
+                    print(f"   🚫 Beep inserido em {ts_info['start']:.2f}s para '{ts_info['word']}'")
         
         # Salvar áudio censurado
         censored_filename = f"censored_{timestamp}{file_ext}"
