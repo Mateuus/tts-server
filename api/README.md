@@ -54,9 +54,12 @@ Gera áudio com clonagem de voz
   "filepath": "../audio/outputs/resultado.wav",
   "size_kb": 123.45,
   "base64": null,
-  "filtered_words": ["clonagem"]
+  "filtered_words": ["clonagem"],
+  "filtered_text": "Este é um teste de ######### de voz"
 }
 ```
+
+**Nota:** Quando `banned_words` é usado, o texto retornado em `filtered_text` terá `#` substituindo as palavras banidas, mas o TTS no áudio lerá "Hashtag" ao invés da palavra.
 
 **Parâmetros:**
 - `text`: Texto para gerar áudio

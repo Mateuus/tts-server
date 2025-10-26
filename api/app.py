@@ -106,6 +106,7 @@ class AudioResponse(BaseModel):
     size_kb: Optional[float] = None
     base64: Optional[str] = None
     filtered_words: Optional[list] = None  # Palavras filtradas
+    filtered_text: Optional[str] = None  # Texto com # substituindo palavras banidas
 
 
 class TranscribeResponse(BaseModel):
@@ -186,7 +187,9 @@ async def generate_audio(request: AudioRequest):
             )
         
         # Filtrar palavras banidas do texto se fornecido
-        text_to_generate = request.text
+        # Criar duas versões: uma para retornar (com #) e outra para TTS (com "Hashtag")
+        text_for_response = request.text  # Versão com # para resposta
+        text_to_generate = request.text   # Versão com "Hashtag" para TTS
         filtered_words_found = []
         
         if request.banned_words:
@@ -194,14 +197,23 @@ async def generate_audio(request: AudioRequest):
             # Converter string separada por vírgulas em lista
             words_to_filter = [word.strip() for word in request.banned_words.split(",") if word.strip()]
             
-            # Filtrar palavras banidas no texto - SUBSTITUIR por "Hashtag"
+            # Filtrar palavras banidas - DUAS versões diferentes
             for banned_word in words_to_filter:
                 pattern = re.compile(re.escape(banned_word), re.IGNORECASE)
-                matches = list(pattern.finditer(text_to_generate))
+                matches_response = list(pattern.finditer(text_for_response))
+                matches_generate = list(pattern.finditer(text_to_generate))
                 
-                if matches:
-                    # Substituir palavra por "Hashtag" (TTS vai ler "Hashtag")
-                    for match in reversed(matches):  # Reversed para não alterar índices
+                if matches_response:
+                    # Versão 1: Substituir por # (para resposta)
+                    for match in reversed(matches_response):
+                        text_for_response = (
+                            text_for_response[:match.start()] + 
+                            "#" * len(match.group()) + 
+                            text_for_response[match.end():]
+                        )
+                    
+                    # Versão 2: Substituir por "Hashtag" (para TTS)
+                    for match in reversed(matches_generate):
                         text_to_generate = (
                             text_to_generate[:match.start()] + 
                             "Hashtag" + 
@@ -211,6 +223,8 @@ async def generate_audio(request: AudioRequest):
             
             if filtered_words_found:
                 print(f"   🚫 Palavras filtradas: {filtered_words_found}")
+                print(f"   📝 Texto para retorno: {text_for_response[:50]}...")
+                print(f"   🎤 Texto para TTS: {text_to_generate[:50]}...")
         
         # Gerar nome de arquivo
         if request.output_filename:
@@ -262,7 +276,8 @@ async def generate_audio(request: AudioRequest):
                 filepath=str(filepath) if save_file else None,
                 size_kb=round(size_kb, 2) if save_file else None,
                 base64=base64_audio,
-                filtered_words=filtered_words_found if filtered_words_found else []
+                filtered_words=filtered_words_found if filtered_words_found else [],
+                filtered_text=text_for_response if filtered_words_found else None
             )
         else:
             raise HTTPException(
