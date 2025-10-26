@@ -94,6 +94,7 @@ class AudioRequest(BaseModel):
     speed: Optional[float] = 0.95
     output_filename: Optional[str] = None
     return_base64: Optional[bool] = False
+    banned_words: Optional[str] = None  # Palavras banidas separadas por vírgula
 
 
 class AudioResponse(BaseModel):
@@ -104,6 +105,7 @@ class AudioResponse(BaseModel):
     filepath: Optional[str] = None
     size_kb: Optional[float] = None
     base64: Optional[str] = None
+    filtered_words: Optional[list] = None  # Palavras filtradas
 
 
 class TranscribeResponse(BaseModel):
@@ -183,6 +185,33 @@ async def generate_audio(request: AudioRequest):
                 detail=f"Arquivo de voz não encontrado: {request.voice_ref}"
             )
         
+        # Filtrar palavras banidas do texto se fornecido
+        text_to_generate = request.text
+        filtered_words_found = []
+        
+        if request.banned_words:
+            import re
+            # Converter string separada por vírgulas em lista
+            words_to_filter = [word.strip() for word in request.banned_words.split(",") if word.strip()]
+            
+            # Filtrar palavras banidas no texto
+            for banned_word in words_to_filter:
+                pattern = re.compile(re.escape(banned_word), re.IGNORECASE)
+                matches = list(pattern.finditer(text_to_generate))
+                
+                if matches:
+                    # Substituir por #
+                    for match in reversed(matches):  # Reversed para não alterar índices
+                        text_to_generate = (
+                            text_to_generate[:match.start()] + 
+                            '#' * len(match.group()) + 
+                            text_to_generate[match.end():]
+                        )
+                        filtered_words_found.append(match.group())
+            
+            if filtered_words_found:
+                print(f"   🚫 Palavras filtradas: {filtered_words_found}")
+        
         # Gerar nome de arquivo
         if request.output_filename:
             filename = request.output_filename
@@ -195,12 +224,12 @@ async def generate_audio(request: AudioRequest):
         filepath = OUTPUT_DIR / filename
         
         print(f"\n🎤 Gerando áudio...")
-        print(f"   Texto: {request.text[:50]}...")
+        print(f"   Texto: {text_to_generate[:50]}...")
         print(f"   Voz: {request.voice_ref}")
         
         # Gerar áudio
         current_model.tts_to_file(
-            text=request.text,
+            text=text_to_generate,
             speaker_wav=request.voice_ref,
             language=request.language,
             file_path=str(filepath),
@@ -232,7 +261,8 @@ async def generate_audio(request: AudioRequest):
                 filename=filename if save_file else None,
                 filepath=str(filepath) if save_file else None,
                 size_kb=round(size_kb, 2) if save_file else None,
-                base64=base64_audio
+                base64=base64_audio,
+                filtered_words=filtered_words_found if filtered_words_found else []
             )
         else:
             raise HTTPException(

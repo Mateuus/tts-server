@@ -40,7 +40,8 @@ Gera áudio com clonagem de voz
   "language": "pt",
   "speed": 0.95,
   "output_filename": "resultado.wav",
-  "return_base64": false
+  "return_base64": false,
+  "banned_words": "clonagem,Open Voice"
 }
 ```
 
@@ -52,9 +53,19 @@ Gera áudio com clonagem de voz
   "filename": "resultado.wav",
   "filepath": "../audio/outputs/resultado.wav",
   "size_kb": 123.45,
-  "base64": null
+  "base64": null,
+  "filtered_words": ["clonagem"]
 }
 ```
+
+**Parâmetros:**
+- `text`: Texto para gerar áudio
+- `voice_ref`: Caminho para arquivo de voz de referência
+- `language`: Idioma (pt, en, es, etc.)
+- `speed`: Velocidade do áudio (0.95 = padrão)
+- `output_filename`: Nome do arquivo de saída (opcional)
+- `return_base64`: Retornar áudio em base64 (padrão: false)
+- `banned_words`: Palavras banidas separadas por vírgula - serão substituídas por # antes de gerar áudio
 
 **Response com base64 (quando `return_base64: true`):**
 ```json
