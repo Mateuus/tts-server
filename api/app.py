@@ -211,19 +211,27 @@ async def generate_audio(request: AudioRequest):
         if filepath.exists():
             size_kb = filepath.stat().st_size / 1024
             
-            # Converter para base64 se solicitado
+            # Converter para base64 e limpar arquivo se solicitado
             base64_audio = None
+            save_file = True
+            
             if request.return_base64:
                 with open(filepath, "rb") as audio_file:
                     audio_bytes = audio_file.read()
                     base64_audio = base64.b64encode(audio_bytes).decode('utf-8')
+                
+                # Se foi pedido base64, não precisa manter o arquivo
+                # (delete para economizar espaço)
+                filepath.unlink()
+                save_file = False
+                print(f"   📦 Áudio convertido para base64 (arquivo não salvo)")
             
             return AudioResponse(
                 success=True,
                 message=f"✅ Áudio gerado com sucesso",
-                filename=filename,
-                filepath=str(filepath),
-                size_kb=round(size_kb, 2),
+                filename=filename if save_file else None,
+                filepath=str(filepath) if save_file else None,
+                size_kb=round(size_kb, 2) if save_file else None,
                 base64=base64_audio
             )
         else:
@@ -448,20 +456,27 @@ async def filter_audio(
         
         detected_language = result.get("language", language)
         
-        # Converter para base64 se solicitado
+        # Converter para base64 e limpar arquivo se solicitado
         base64_audio = None
+        save_file = True
+        
         if return_base64:
             with open(censored_filepath, "rb") as audio_file:
                 audio_bytes = audio_file.read()
                 base64_audio = base64.b64encode(audio_bytes).decode('utf-8')
+            
+            # Se foi pedido base64, não precisa manter o arquivo
+            censored_filepath.unlink()
+            save_file = False
+            print(f"   📦 Áudio convertido para base64 (arquivo não salvo)")
         
         return CensorResponse(
             success=True,
             message=f"✅ Áudio filtrado com sucesso" if censored_words_found else "✅ Áudio processado (nenhuma palavra banida encontrada)",
             text=censored_text,
             censored_words=censored_words_found if censored_words_found else [],
-            filename=censored_filename,
-            filepath=str(censored_filepath),
+            filename=censored_filename if save_file else None,
+            filepath=str(censored_filepath) if save_file else None,
             language=detected_language,
             base64=base64_audio
         )
