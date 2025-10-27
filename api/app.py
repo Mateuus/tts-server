@@ -178,6 +178,9 @@ class GenerateAIRequest(BaseModel):
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 0.9
     do_sample: Optional[bool] = True
+    generate_audio: Optional[bool] = True  # Gerar áudio automaticamente
+    voice_ref: Optional[str] = "audio/minha_voz.mp3"  # Arquivo de voz para clonagem
+    language: str = "pt"  # Idioma para TTS
 
 
 class GenerateAIResponse(BaseModel):
@@ -186,8 +189,12 @@ class GenerateAIResponse(BaseModel):
     message: str
     generated_text: Optional[str] = None
     prompt: Optional[str] = None
-    model_used: Optional[str] = None
+    ai_model_used: Optional[str] = None
+    audio_filename: Optional[str] = None
+    audio_filepath: Optional[str] = None
     length: Optional[int] = None
+    
+    model_config = {"protected_namespaces": ()}  # Resolver avisos do Pydantic
 
 
 @app.get("/")
@@ -724,12 +731,49 @@ async def generate_ai_text(request: GenerateAIRequest):
         # Remover o prompt original do texto gerado
         generated_text = generated_text[len(request.prompt):].strip()
         
+        # Gerar áudio se solicitado
+        audio_filename = None
+        audio_filepath = None
+        
+        if request.generate_audio:
+            print(f"\n🎤 Gerando áudio do texto...")
+            print(f"   Texto: {generated_text[:50]}...")
+            
+            # Carregar modelo TTS se necessário
+            current_tts_model = load_tts_model()
+            
+            if TTS_READY:
+                try:
+                    # Validar arquivo de voz
+                    if not os.path.exists(request.voice_ref):
+                        print(f"⚠️ Arquivo de voz não encontrado: {request.voice_ref}")
+                    else:
+                        # Gerar nome de arquivo
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        audio_filename = f"ai_generated_{timestamp}.wav"
+                        audio_filepath = str(OUTPUT_DIR / audio_filename)
+                        
+                        # Gerar áudio com TTS
+                        current_tts_model.tts_to_file(
+                            text=generated_text,
+                            speaker_wav=request.voice_ref,
+                            language=request.language,
+                            file_path=audio_filepath,
+                            speed=1.0
+                        )
+                        
+                        print(f"   ✅ Áudio gerado: {audio_filename}")
+                except Exception as e:
+                    print(f"⚠️ Erro ao gerar áudio: {e}")
+        
         return GenerateAIResponse(
             success=True,
-            message="✅ Texto gerado com sucesso",
+            message="✅ Texto e áudio gerados com sucesso" if audio_filename else "✅ Texto gerado com sucesso",
             generated_text=generated_text,
             prompt=request.prompt,
-            model_used=request.model_name,
+            ai_model_used=request.model_name,
+            audio_filename=audio_filename,
+            audio_filepath=audio_filepath,
             length=len(generated_text)
         )
     
