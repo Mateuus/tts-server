@@ -1,0 +1,38 @@
+✅ PROBLEMA RESOLVIDO DEFINITIVAMENTE!
+
+🔧 PROBLEMA IDENTIFICADO
+
+O erro ocorria porque o torchaudio estava instalado via pip padrão,
+que não tem os binários CUDA compilados corretamente para essa versão.
+
+❌ ERRO ORIGINAL:
+- undefined symbol: _ZNK3c105Error4whatEv
+- cannot import name '_init_sox' from 'torchaudio._extension.utils'
+
+🔨 SOLUÇÃO APLICADA
+
+Instalei o torchaudio do índice oficial do PyTorch (com CUDA):
+
+pip install torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
+
+✅ VERSÕES FINAIS
+
+- torch: 2.3.1
+- torchaudio: 2.3.1+cu121 (COM CUDA!)
+- TTS: 0.22.0
+- transformers: 4.47.1
+- Whisper: 20231117
+
+✅ TESTES REALIZADOS
+
+✓ TTS importa corretamente
+✓ Whisper importa corretamente
+✓ API completa carrega sem erros
+✓ Modelos TTS baixados e funcionando
+✓ Todos os endpoints operacionais
+
+🚀 PRONTO PARA USAR!
+
+Execute: ./iniciar_api.sh
+
+A API estará disponível em: http://localhost:8000

@@ -24,4 +24,3 @@ echo ""
 
 # Iniciar
 python app.py
-
