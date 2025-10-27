@@ -49,3 +49,5 @@ audio/uploads/
 *.ckpt
 checkpoints/
 
+tts_env/
+models/

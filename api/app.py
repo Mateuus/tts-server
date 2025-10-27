@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 import uvicorn
+import torch
 
 # Adicionar paths necessários
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -38,6 +39,8 @@ _tts_model = None
 _TTS_READY = False
 _whisper_model = None
 _WHISPER_READY = False
+_ai_models = {}
+_AI_READY = False
 
 def load_tts_model():
     """Carrega o modelo TTS apenas uma vez (thread-safe)"""
@@ -78,6 +81,43 @@ def load_whisper_model():
             _WHISPER_READY = False
         
         return _whisper_model
+
+def load_ai_model(model_name: str = "lula"):
+    """Carrega modelos de IA para geração de texto (lazy loading)"""
+    global _ai_models, _AI_READY
+    
+    with _model_lock:
+        if model_name in _ai_models:
+            return _ai_models[model_name]
+        
+        print(f"🔄 Carregando modelo de IA: {model_name}...")
+        try:
+            from transformers import GPT2LMHeadModel, GPT2Tokenizer
+            
+            # Mapear nomes para paths
+            model_paths = {
+                "lula": "../models/lulaoficial-ptbrasil",
+                "lulaoficial-ptbrasil": "../models/lulaoficial-ptbrasil"
+            }
+            
+            model_path = model_paths.get(model_name.lower(), model_name)
+            
+            # Carregar modelo e tokenizer
+            tokenizer = GPT2Tokenizer.from_pretrained(model_path)
+            model = GPT2LMHeadModel.from_pretrained(model_path)
+            
+            _ai_models[model_name] = {
+                'model': model,
+                'tokenizer': tokenizer
+            }
+            
+            print(f"✅ Modelo de IA '{model_name}' carregado!")
+            _AI_READY = True
+        except Exception as e:
+            print(f"⚠️ Erro ao carregar modelo de IA '{model_name}': {e}")
+            _AI_READY = False
+        
+        return _ai_models.get(model_name)
 
 # Pre-carregar modelos
 tts_model = load_tts_model()
@@ -130,6 +170,26 @@ class CensorResponse(BaseModel):
     base64: Optional[str] = None
 
 
+class GenerateAIRequest(BaseModel):
+    """Request model para geração de texto com IA"""
+    prompt: str
+    model_name: Optional[str] = "lula"
+    max_length: Optional[int] = 150
+    temperature: Optional[float] = 0.7
+    top_p: Optional[float] = 0.9
+    do_sample: Optional[bool] = True
+
+
+class GenerateAIResponse(BaseModel):
+    """Response model para geração de texto com IA"""
+    success: bool
+    message: str
+    generated_text: Optional[str] = None
+    prompt: Optional[str] = None
+    model_used: Optional[str] = None
+    length: Optional[int] = None
+
+
 @app.get("/")
 async def root():
     """Endpoint raiz"""
@@ -138,7 +198,8 @@ async def root():
         "status": "ready" if TTS_READY else "not ready",
             "endpoints": {
             "health": "/health",
-            "generate": "/generate (POST)",
+            "generate": "/generate (POST) - Gerar áudio com clonagem",
+            "generateAI": "/generateAI (POST) - Gerar texto com IA",
             "transcribe": "/transcribe (POST)",
             "filter": "/filter (POST)",
             "list": "/list",
@@ -612,6 +673,73 @@ async def transcribe_audio(
         raise HTTPException(
             status_code=500,
             detail=f"Erro ao transcrever áudio: {str(e)}"
+        )
+
+
+@app.post("/generateAI", response_model=GenerateAIResponse)
+async def generate_ai_text(request: GenerateAIRequest):
+    """
+    Gerar texto usando IA (GPT-2 customizado)
+    
+    Args:
+        request: GenerateAIRequest com prompt e configurações
+    
+    Returns:
+        GenerateAIResponse com o texto gerado
+    """
+    try:
+        # Carregar modelo
+        model_data = load_ai_model(request.model_name)
+        
+        if model_data is None:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Modelo '{request.model_name}' não está pronto. Verifique os logs."
+            )
+        
+        model = model_data['model']
+        tokenizer = model_data['tokenizer']
+        
+        print(f"\n🤖 Gerando texto com IA...")
+        print(f"   Modelo: {request.model_name}")
+        print(f"   Prompt: {request.prompt[:50]}...")
+        
+        # Tokenizar o prompt
+        inputs = tokenizer.encode(request.prompt, return_tensors="pt")
+        
+        # Gerar texto
+        with torch.no_grad():
+            outputs = model.generate(
+                inputs,
+                max_length=request.max_length,
+                temperature=request.temperature,
+                top_p=request.top_p,
+                do_sample=request.do_sample,
+                pad_token_id=tokenizer.eos_token_id
+            )
+        
+        # Decodificar a resposta
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        
+        # Remover o prompt original do texto gerado
+        generated_text = generated_text[len(request.prompt):].strip()
+        
+        return GenerateAIResponse(
+            success=True,
+            message="✅ Texto gerado com sucesso",
+            generated_text=generated_text,
+            prompt=request.prompt,
+            model_used=request.model_name,
+            length=len(generated_text)
+        )
+    
+    except Exception as e:
+        print(f"❌ Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao gerar texto: {str(e)}"
         )
 
 
