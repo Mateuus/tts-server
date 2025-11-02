@@ -44,9 +44,13 @@ RUN pip install --upgrade pip setuptools wheel && \
 COPY --chown=appuser:appuser ./api ./api
 COPY --chown=appuser:appuser ./audio ./audio
 
-# Criar diretórios necessários
-RUN mkdir -p /app/api/audio/uploads /app/api/audio/outputs && \
-    chown -R appuser:appuser /app
+# Criar diretórios necessários e configurar permissões
+RUN mkdir -p /app/api/audio/uploads /app/api/audio/outputs \
+             /home/appuser/.local/share/tts \
+             /home/appuser/.cache/huggingface \
+             /home/appuser/.cache/whisper \
+             /home/appuser/.cache/matplotlib && \
+    chown -R appuser:appuser /app /home/appuser
 
 # Mudar para usuário não-root
 USER appuser
