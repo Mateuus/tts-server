@@ -5,7 +5,12 @@
 # Documentação: https://coqui-tts.readthedocs.io/
 # ==============================================================================
 
-# Coqui TTS - Gerencia suas próprias dependências (gruut, coqpit, etc)
+# Coqui TTS - Gerencia TODAS as suas dependências automaticamente:
+# - gruut, coqpit, trainer
+# - transformers, tokenizers, huggingface-hub
+# - nltk, pysbd, inflect
+# - numpy, scipy, librosa
+# - e muito mais...
 coqui-tts>=0.27.0
 
 # PyTorch (CPU version - para GPU usar Dockerfile.gpu)
@@ -22,10 +27,6 @@ python-multipart==0.0.6
 
 # Processamento de áudio adicional
 pydub==0.25.1
-soundfile==0.13.1
-
-# Transformers para modelos de IA customizados
-transformers==4.47.1
 
 # Utilitários
 requests==2.32.5
