@@ -295,7 +295,7 @@ pip install -r requirements.txt
 ## 📖 Documentação Adicional
 
 - Documentação da API: http://localhost:8000/docs
-- [Coqui TTS Documentation](https://github.com/coqui-ai/TTS)
+- [Coqui TTS Documentation](https://github.com/idiap/coqui-ai-TTS/) (mantido pelo Idiap Research Institute)
 - [Whisper Documentation](https://github.com/openai/whisper)
 
 ## 🎯 Próximos Passos

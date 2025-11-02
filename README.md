@@ -1,6 +1,6 @@
 # 🐸 Coqui TTS Server
 
-Servidor Docker para sintetização de texto em fala usando [Coqui TTS](https://github.com/coqui-ai/TTS).
+Servidor Docker para sintetização de texto em fala usando [Coqui TTS](https://github.com/idiap/coqui-ai-TTS/) (mantido pelo Idiap Research Institute, v0.27.2+).
 
 ## 📋 Pré-requisitos
 

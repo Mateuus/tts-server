@@ -1,5 +1,8 @@
 # Coqui TTS - Text to Speech
-TTS==0.22.0
+# Usando versão mantida pelo Idiap Research Institute
+# Repositório oficial: https://github.com/idiap/coqui-ai-TTS/
+# Última release estável: v0.27.2 (Sep 25, 2025)
+coqui-tts>=0.27.0
 
 # PyTorch (sem CUDA no requirements.txt - instalar separadamente se necessário)
 # Para CPU: pip install torch==2.3.1 torchaudio==2.3.1

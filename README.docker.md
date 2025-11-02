@@ -2,6 +2,8 @@
 
 Documentação completa para rodar a API de Clonagem de Voz usando Docker.
 
+> **ℹ️ Sobre o Coqui TTS:** Esta API usa [Coqui TTS mantido pelo Idiap Research Institute](https://github.com/idiap/coqui-ai-TTS/), versão v0.27.2+. O projeto original da Coqui AI foi descontinuado, mas o Idiap continua mantendo e atualizando o código.
+
 ## 📋 Índice
 
 - [Pré-requisitos](#pré-requisitos)

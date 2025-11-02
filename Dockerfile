@@ -1,6 +1,10 @@
 # ==============================================================================
 # Dockerfile para API de Clonagem de Voz com Coqui TTS (CPU)
 # ==============================================================================
+# Coqui TTS mantido pelo Idiap Research Institute
+# GitHub: https://github.com/idiap/coqui-ai-TTS/
+# Versão: v0.27.2+ (Sep 2025)
+# ==============================================================================
 
 # Stage 1: Builder - Instalar dependências
 FROM python:3.11-slim as builder
