@@ -14,7 +14,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    COQUI_TOS_AGREED=1
 
 # Instalar dependências do sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \

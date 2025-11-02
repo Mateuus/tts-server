@@ -27,6 +27,7 @@ services:
       - TTS_HOME=/root/.local/share/tts
       - HF_HOME=/root/.cache/huggingface
       - NUMBA_CACHE_DIR=/tmp/numba_cache
+      - COQUI_TOS_AGREED=1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -72,6 +73,7 @@ services:
       - TTS_HOME=/root/.local/share/tts
       - HF_HOME=/root/.cache/huggingface
       - NUMBA_CACHE_DIR=/tmp/numba_cache
+      - COQUI_TOS_AGREED=1
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
