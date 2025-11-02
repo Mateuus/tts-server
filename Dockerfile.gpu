@@ -1,32 +1,111 @@
-# Dockerfile para Coqui TTS com suporte GPU (CUDA)
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+# ==============================================================================
+# Dockerfile para API de Clonagem de Voz com Coqui TTS (GPU/CUDA)
+# ==============================================================================
 
-# Instalar Python e dependências
-RUN apt-get update && apt-get install -y \
-    python3.10 \
+# Stage 1: Builder - Instalar dependências
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 as builder
+
+# Evitar prompts interativos
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Instalar Python 3.11 e dependências
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-dev \
+    python3.11-distutils \
     python3-pip \
     build-essential \
-    curl \
-    libsndfile1 \
+    gcc \
+    g++ \
+    cmake \
     git \
+    curl \
+    libsndfile1-dev \
+    libsox-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# Configurar Python 3.11 como padrão
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Criar diretório de trabalho
+WORKDIR /app
+
+# Copiar requirements e instalar dependências Python
+COPY requirements.txt .
+RUN python3 -m pip install --upgrade pip setuptools wheel && \
+    python3 -m pip install --no-cache-dir torch==2.3.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu118 && \
+    python3 -m pip install --no-cache-dir -r requirements.txt
+
+# ==============================================================================
+# Stage 2: Runtime - Imagem final otimizada
+# ==============================================================================
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Variáveis de ambiente
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.local/bin:$PATH" \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Instalar Python 3.11 e dependências de runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-distutils \
+    libsndfile1 \
+    libgomp1 \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configurar Python 3.11 como padrão
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+
+# Criar usuário não-root para segurança
+RUN useradd -m -u 1000 -s /bin/bash appuser && \
+    mkdir -p /app/audio/uploads /app/audio/outputs && \
+    chown -R appuser:appuser /app
+
+# Copiar dependências Python do builder
+COPY --from=builder /usr/local/lib/python3.11/dist-packages /usr/local/lib/python3.11/dist-packages
 
 # Configurar diretório de trabalho
 WORKDIR /app
 
-# Copiar requirements (se existir)
-COPY requirements.txt ./
+# Copiar código da aplicação
+COPY --chown=appuser:appuser ./api ./api
+COPY --chown=appuser:appuser ./audio ./audio
 
-# Instalar Coqui TTS com suporte GPU
-RUN pip3 install --upgrade pip && \
-    pip3 install TTS
+# Criar diretórios necessários
+RUN mkdir -p /app/api/audio/uploads /app/api/audio/outputs && \
+    chown -R appuser:appuser /app
 
-# Criar diretório para armazenar arquivos de áudio
-RUN mkdir -p /app/audio
+# Mudar para usuário não-root
+USER appuser
 
-# Expor porta para API
-EXPOSE 5000
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Comando padrão - manter container vivo
-CMD ["tail", "-f", "/dev/null"]
+# Expor porta da API
+EXPOSE 8000
 
+# Comando de inicialização
+WORKDIR /app/api
+CMD ["python", "app.py"]
