@@ -6,6 +6,7 @@ FastAPI para Geração de Áudio com Clonagem de Voz
 import os
 import sys
 import base64
+import warnings
 from pathlib import Path
 from datetime import datetime
 from contextlib import asynccontextmanager
@@ -14,6 +15,11 @@ from pydantic import BaseModel
 from typing import Optional
 import uvicorn
 import torch
+
+# Suprimir warnings específicos do GPT2 e outros não críticos
+warnings.filterwarnings("ignore", message=".*GPT2InferenceModel.*")
+warnings.filterwarnings("ignore", message=".*does not have a tokenizer_class attribute.*")
+warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
 
 # Adicionar paths necessários
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
