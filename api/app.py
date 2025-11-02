@@ -8,6 +8,7 @@ import sys
 import base64
 from pathlib import Path
 from datetime import datetime
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
@@ -16,12 +17,6 @@ import torch
 
 # Adicionar paths necessários
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-app = FastAPI(
-    title="🎤 API de Clonagem de Voz",
-    description="Gere áudios com clonagem de voz usando Coqui TTS",
-    version="1.0.0"
-)
 
 # Configurações
 UPLOAD_DIR = Path("audio/uploads")
@@ -32,7 +27,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # Palavras banidas
 BANNED_WORDS = ['clonagem', 'Open Voice']
 
-# Carregar TTS uma vez (lazy loading)
+# Variáveis globais para modelos (lazy loading)
 import threading
 _model_lock = threading.Lock()
 _tts_model = None
@@ -41,6 +36,7 @@ _whisper_model = None
 _WHISPER_READY = False
 _ai_models = {}
 _AI_READY = False
+_MODELS_PRELOADED = False  # Flag para evitar carregamento múltiplo
 
 def load_tts_model():
     """Carrega o modelo TTS apenas uma vez (thread-safe)"""
@@ -119,11 +115,36 @@ def load_ai_model(model_name: str = "lula"):
         
         return _ai_models.get(model_name)
 
-# Pre-carregar modelos
-tts_model = load_tts_model()
-TTS_READY = _TTS_READY
-whisper_model = load_whisper_model()
-WHISPER_READY = _WHISPER_READY
+
+# Lifespan event handler - carrega modelos no startup e limpa no shutdown
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    """Gerencia o ciclo de vida da aplicação"""
+    global _MODELS_PRELOADED
+    
+    # Startup: Carregar modelos
+    if not _MODELS_PRELOADED:
+        print("\n🔄 Carregando modelos no startup...")
+        load_tts_model()
+        load_whisper_model()
+        _MODELS_PRELOADED = True
+        print("✅ Modelos pré-carregados com sucesso!\n")
+    else:
+        print("⚠️ Modelos já foram carregados, pulando...")
+    
+    yield  # Aplicação rodando
+    
+    # Shutdown: Limpeza (opcional)
+    print("\n🔄 Encerrando aplicação...")
+
+
+# Criar app FastAPI com lifespan
+app = FastAPI(
+    title="🎤 API de Clonagem de Voz",
+    description="Gere áudios com clonagem de voz usando Coqui TTS",
+    version="1.0.0",
+    lifespan=lifespan
+)
 
 
 class AudioRequest(BaseModel):
@@ -181,6 +202,8 @@ class GenerateAIRequest(BaseModel):
     generate_audio: Optional[bool] = True  # Gerar áudio automaticamente
     voice_ref: Optional[str] = "audio/minha_voz.mp3"  # Arquivo de voz para clonagem
     language: str = "pt"  # Idioma para TTS
+    
+    model_config = {"protected_namespaces": ()}  # Resolver avisos do Pydantic
 
 
 class GenerateAIResponse(BaseModel):
@@ -202,7 +225,7 @@ async def root():
     """Endpoint raiz"""
     return {
         "message": "🎤 API de Clonagem de Voz",
-        "status": "ready" if TTS_READY else "not ready",
+        "status": "ready" if _TTS_READY else "not ready",
             "endpoints": {
             "health": "/health",
             "generate": "/generate (POST) - Gerar áudio com clonagem",
@@ -220,8 +243,8 @@ async def health():
     """Verificar saúde da API"""
     return {
         "status": "healthy",
-        "tts_ready": TTS_READY,
-        "whisper_ready": WHISPER_READY,
+        "tts_ready": _TTS_READY,
+        "whisper_ready": _WHISPER_READY,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -240,7 +263,7 @@ async def generate_audio(request: AudioRequest):
     # Carregar modelo se necessário
     current_model = load_tts_model()
     
-    if not TTS_READY:
+    if not _TTS_READY:
         raise HTTPException(
             status_code=503,
             detail="TTS não está pronto. Verifique os logs."
@@ -432,7 +455,7 @@ async def filter_audio(
     # Carregar modelo se necessário
     current_model = load_whisper_model()
     
-    if not WHISPER_READY:
+    if not _WHISPER_READY:
         raise HTTPException(
             status_code=503,
             detail="Whisper não está pronto. Verifique os logs."
@@ -620,7 +643,7 @@ async def transcribe_audio(
     # Carregar modelo se necessário
     current_model = load_whisper_model()
     
-    if not WHISPER_READY:
+    if not _WHISPER_READY:
         raise HTTPException(
             status_code=503,
             detail="Whisper não está pronto. Verifique os logs."
@@ -742,7 +765,7 @@ async def generate_ai_text(request: GenerateAIRequest):
             # Carregar modelo TTS se necessário
             current_tts_model = load_tts_model()
             
-            if TTS_READY:
+            if _TTS_READY:
                 try:
                     # Validar arquivo de voz
                     if not os.path.exists(request.voice_ref):
