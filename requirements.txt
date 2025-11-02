@@ -1,71 +1,34 @@
-# Coqui TTS - Text to Speech
-# Usando versão mantida pelo Idiap Research Institute
-# Repositório oficial: https://github.com/idiap/coqui-ai-TTS/
-# Última release estável: v0.27.2 (Sep 25, 2025)
+# ==============================================================================
+# Requirements para API de Clonagem de Voz - EoPix
+# ==============================================================================
+# Repositório: https://github.com/idiap/coqui-ai-TTS/
+# Documentação: https://coqui-tts.readthedocs.io/
+# ==============================================================================
+
+# Coqui TTS - Gerencia suas próprias dependências (gruut, coqpit, etc)
 coqui-tts>=0.27.0
 
-# PyTorch (sem CUDA no requirements.txt - instalar separadamente se necessário)
-# Para CPU: pip install torch==2.3.1 torchaudio==2.3.1
-# Para CUDA: pip install torch==2.3.1 torchaudio==2.3.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+# PyTorch (CPU version - para GPU usar Dockerfile.gpu)
 torch==2.3.1
 torchaudio==2.3.1
 
 # OpenAI Whisper para transcrição
 openai-whisper==20231117
-tiktoken==0.12.0
 
 # FastAPI e servidor web
 fastapi==0.109.0
-uvicorn==0.27.0
-starlette==0.35.1
-pydantic==2.5.3
-pydantic_core==2.14.6
+uvicorn[standard]==0.27.0
 python-multipart==0.0.6
+
+# Processamento de áudio adicional
 pydub==0.25.1
-
-# Transformers (compatível com TTS)
-transformers==4.47.1
-tokenizers==0.21.4
-huggingface-hub==0.36.0
-safetensors==0.6.2
-
-# Processamento de áudio
 soundfile==0.13.1
-librosa==0.11.0
-soxr==1.0.0
 
-# Científico e numérico
-numpy==1.26.4
-scipy==1.16.2
-scikit-learn==1.7.2
-pandas==1.5.3
-
-# Machine Learning e Números
-numba==0.62.1
-tqdm==4.67.1
-einops==0.8.1
-
-# Fluxo de trabalho e configuração
-pyyaml==6.0.3
-coqpit==0.0.17
-trainer==0.0.36
-
-# NLTK e processamento de linguagem
-nltk==3.9.2
-pysbd==0.3.4
-gruut==2.2.3
-inflect==7.5.0
+# Transformers para modelos de IA customizados
+transformers==4.47.1
 
 # Utilitários
-click==8.3.0
 requests==2.32.5
-fsspec==2025.9.0
-packaging==25.0
 
-# Docker e runtime
-anyio==4.11.0
-typing_extensions==4.15.0
-
-# Nota importante:
-# Para instalar torchaudio com CUDA, use:
-# pip install torchaudio==2.3.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+# Nota: Para GPU/CUDA, instalar:
+# pip install torch==2.3.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu118

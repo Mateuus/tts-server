@@ -3,18 +3,20 @@
 # ==============================================================================
 # Coqui TTS mantido pelo Idiap Research Institute
 # GitHub: https://github.com/idiap/coqui-ai-TTS/
+# Docs: https://coqui-tts.readthedocs.io/en/latest/docker_images.html
 # Versão: v0.27.2+ (Sep 2025)
 # ==============================================================================
 
-# Stage 1: Builder - Instalar dependências
-FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 as builder
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
-# Evitar prompts interativos
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Variáveis de ambiente
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Instalar Python 3.11 e dependências
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,74 +25,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends \
     python3.11 \
     python3.11-dev \
-    python3.11-distutils \
     python3-pip \
     build-essential \
     gcc \
     g++ \
-    cmake \
     git \
     curl \
     libsndfile1-dev \
-    libsox-dev \
     ffmpeg \
+    espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 # Configurar Python 3.11 como padrão
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
     update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-# Criar diretório de trabalho
-WORKDIR /app
-
-# Copiar requirements e instalar dependências Python
-COPY requirements.txt .
-RUN python3 -m pip install --upgrade pip setuptools wheel && \
-    python3 -m pip install --no-cache-dir torch==2.3.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu118 && \
-    python3 -m pip install --no-cache-dir -r requirements.txt
-
-# ==============================================================================
-# Stage 2: Runtime - Imagem final otimizada
-# ==============================================================================
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
-
-# Variáveis de ambiente
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PATH="/app/.local/bin:$PATH" \
-    LANG=C.UTF-8 \
-    LC_ALL=C.UTF-8 \
-    NVIDIA_VISIBLE_DEVICES=all \
-    NVIDIA_DRIVER_CAPABILITIES=compute,utility
-
-# Instalar Python 3.11 e dependências de runtime
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3.11-distutils \
-    libsndfile1 \
-    libgomp1 \
-    ffmpeg \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Configurar Python 3.11 como padrão
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-
-# Criar usuário não-root para segurança
-RUN useradd -m -u 1000 -s /bin/bash appuser && \
-    mkdir -p /app/audio/uploads /app/audio/outputs && \
-    chown -R appuser:appuser /app
-
-# Copiar dependências Python do builder
-COPY --from=builder /usr/local/lib/python3.11/dist-packages /usr/local/lib/python3.11/dist-packages
+# Criar usuário não-root
+RUN useradd -m -u 1000 -s /bin/bash appuser
 
 # Configurar diretório de trabalho
 WORKDIR /app
+
+# Copiar requirements
+COPY requirements.txt .
+
+# Instalar PyTorch com CUDA e outras dependências
+RUN python3 -m pip install --upgrade pip setuptools wheel && \
+    python3 -m pip install --no-cache-dir \
+        torch==2.3.1 torchaudio==2.3.1 \
+        --index-url https://download.pytorch.org/whl/cu118 && \
+    python3 -m pip install --no-cache-dir -r requirements.txt
 
 # Copiar código da aplicação
 COPY --chown=appuser:appuser ./api ./api
@@ -107,7 +71,7 @@ USER appuser
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Expor porta da API
+# Expor porta
 EXPOSE 8000
 
 # Comando de inicialização
