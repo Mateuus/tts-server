@@ -1,9 +1,11 @@
 # Coqui TTS - Text to Speech
 TTS==0.22.0
 
-# PyTorch (com CUDA)
+# PyTorch (sem CUDA no requirements.txt - instalar separadamente se necessário)
+# Para CPU: pip install torch==2.3.1 torchaudio==2.3.1
+# Para CUDA: pip install torch==2.3.1 torchaudio==2.3.1+cu121 --index-url https://download.pytorch.org/whl/cu121
 torch==2.3.1
-torchaudio==2.3.1+cu121
+torchaudio==2.3.1
 
 # OpenAI Whisper para transcrição
 openai-whisper==20231117

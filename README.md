@@ -8,6 +8,8 @@ Servidor Docker para sintetização de texto em fala usando [Coqui TTS](https://
 - Docker Compose instalado
 - (Opcional) NVIDIA Docker runtime para suporte GPU
 
+**💡 Para instalação local (sem Docker):** Veja o guia completo em [`INSTALACAO.md`](INSTALACAO.md)
+
 ## 🚀 Instalação
 
 ### CPU Only
@@ -63,9 +65,25 @@ tts-server/
 ├── Dockerfile.gpu      # Imagem GPU
 ├── docker-compose.yml  # Configuração Docker Compose
 ├── requirements.txt    # Dependências Python
+├── INSTALACAO.md       # Guia completo de instalação
+├── instalar_dependencias.sh  # Script para instalar dependências (detecta GPU)
+├── criar_env.sh        # Script para criar arquivo .env
+├── iniciar_api.sh      # Script para iniciar a API localmente
 ├── models/            # Modelos baixados (criado automaticamente)
-└── audio/             # Arquivos de áudio gerados
+├── audio/             # Arquivos de áudio gerados
+└── api/               # Código da API FastAPI
+    └── app.py         # Aplicação principal
 ```
+
+## ⚙️ Configuração (.env)
+
+Para instalação local, configure as variáveis de ambiente criando um arquivo `.env`:
+
+```bash
+./criar_env.sh
+```
+
+Ou consulte [`INSTALACAO.md`](INSTALACAO.md) para opções detalhadas de configuração.
 
 ## 🔧 Modelos Disponíveis
 
