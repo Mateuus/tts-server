@@ -27,36 +27,312 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # Configurações
 UPLOAD_DIR = Path("audio/uploads")
 OUTPUT_DIR = Path("audio/outputs")
+VOICES_DIR = Path("audio/voices")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+VOICES_DIR.mkdir(parents=True, exist_ok=True)
 
 # Palavras banidas
 BANNED_WORDS = ['clonagem', 'Open Voice']
 
+# Mapeamento de vozes modelo pré-configuradas
+# Formato: {voice_id: {name, language, gender}}
+VOICE_MODELS = {
+    "Leni": {
+        "name": "Leni (Português do Brasil)",
+        "language": "pt",
+        "gender": "female"
+    },
+    "Camila": {
+        "name": "Camila (Português do Brasil)",
+        "language": "pt",
+        "gender": "female"
+    },
+    "Ricardo": {
+        "name": "Ricardo (Português do Brasil)",
+        "language": "pt",
+        "gender": "male"
+    },
+    "Ines": {
+        "name": "Inês (Português de Portugal)",
+        "language": "pt",
+        "gender": "female"
+    },
+    "Cristiano": {
+        "name": "Cristiano (Português de Portugal)",
+        "language": "pt",
+        "gender": "male"
+    }
+}
+
 # Variáveis globais para modelos (lazy loading)
 import threading
 _model_lock = threading.Lock()
-_tts_model = None
+_tts_model = None  # Modelo XTTS v2 (para clonagem)
 _TTS_READY = False
+# Variáveis VITS removidas - agora usamos apenas XTTS v2
 _whisper_model = None
 _WHISPER_READY = False
 _ai_models = {}
 _AI_READY = False
 _MODELS_PRELOADED = False  # Flag para evitar carregamento múltiplo
 
+# Mapeamento de vozes modelo para arquivos de referência
+# Usando XTTS v2 com clonagem de voz (melhor para português do Brasil)
+VOICE_MODEL_MAPPING = {
+    "Leni": {
+        "voice_ref": VOICES_DIR / "leni" / "reference.wav",  # Arquivo de referência
+        "language": "pt",  # Português do Brasil
+        "use_xtts": True  # Usar XTTS v2 com clonagem
+    },
+    "Camila": {
+        "voice_ref": VOICES_DIR / "camila" / "reference.wav",
+        "language": "pt",
+        "use_xtts": True
+    },
+    "Ricardo": {
+        "voice_ref": VOICES_DIR / "ricardo" / "reference.wav",
+        "language": "pt",
+        "use_xtts": True
+    },
+    "Ines": {
+        "voice_ref": VOICES_DIR / "ines" / "reference.wav",
+        "language": "pt",  # Português de Portugal
+        "use_xtts": True
+    },
+    "Cristiano": {
+        "voice_ref": VOICES_DIR / "cristiano" / "reference.wav",
+        "language": "pt",  # Português de Portugal
+        "use_xtts": True
+    }
+}
+
+def get_voice_ref_path(voice_id: str) -> Optional[Path]:
+    """Resolve voice_id para caminho do arquivo de referência"""
+    if voice_id in VOICE_MODEL_MAPPING:
+        voice_config = VOICE_MODEL_MAPPING[voice_id]
+        voice_path = voice_config["voice_ref"]
+        
+        # Tentar diferentes extensões
+        if voice_path.exists():
+            return voice_path
+        
+        # Tentar .mp3, .wav, .ogg
+        for ext in [".mp3", ".wav", ".ogg"]:
+            alt_path = voice_path.with_suffix(ext)
+            if alt_path.exists():
+                return alt_path
+        
+        # Se não encontrou, retornar None
+        return None
+    
+    # Se não está no mapeamento, assumir que é um caminho direto
+    path = Path(voice_id)
+    if path.exists():
+        return path
+    
+    return None
+
+def convert_money_to_text(text: str) -> str:
+    """
+    Converte valores monetários (R$ 10,50, $ 10,50, etc.) para texto por extenso
+    
+    Exemplos:
+    - "R$ 10,50" → "dez reais e cinquenta centavos"
+    - "R$ 1,00" → "um real"
+    - "R$ 0,50" → "cinquenta centavos"
+    - "$ 10,50" → "dez dólares e cinquenta centavos"
+    - "US$ 10,50" → "dez dólares e cinquenta centavos"
+    """
+    import re
+    
+    # Números por extenso
+    unidades = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove']
+    dezenas_10_19 = ['dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove']
+    dezenas = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa']
+    centenas = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos']
+    
+    def number_to_text(num: int) -> str:
+        """Converte número para texto por extenso"""
+        if num == 0:
+            return 'zero'
+        if num == 100:
+            return 'cem'
+        if num == 1000:
+            return 'mil'
+        
+        parts = []
+        
+        # Milhares
+        if num >= 1000:
+            mil = num // 1000
+            if mil == 1:
+                parts.append('mil')
+            else:
+                parts.append(number_to_text(mil) + ' mil')
+            num = num % 1000
+        
+        # Centenas
+        if num >= 100:
+            cent = num // 100
+            parts.append(centenas[cent])
+            num = num % 100
+        
+        # Dezenas e unidades
+        if num >= 20:
+            dez = num // 10
+            unid = num % 10
+            if unid == 0:
+                parts.append(dezenas[dez])
+            else:
+                parts.append(dezenas[dez] + ' e ' + unidades[unid])
+        elif num >= 10:
+            parts.append(dezenas_10_19[num - 10])
+        elif num > 0:
+            parts.append(unidades[num])
+        
+        return ' e '.join(parts)
+    
+    # Padrões para valores monetários
+    # R$ 10,50 ou R$10,50 ou R$ 10.50 ou R$10.50
+    pattern_brl = re.compile(r'R\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+,\d{2}|\d+)', re.IGNORECASE)
+    # $ 10,50 ou $10,50 ou $ 10.50 ou $10.50 ou US$ 10,50
+    pattern_usd = re.compile(r'(?:US\s*)?\$\s*(\d{1,3}(?:\.\d{3})*(?:,\d{2})?|\d+,\d{2}|\d+)', re.IGNORECASE)
+    
+    def convert_value(match, currency: str) -> str:
+        """Converte um valor monetário para texto"""
+        value_str = match.group(1)
+        
+        # Normalizar separador decimal e milhar
+        # Se tem vírgula, assume formato BR: vírgula é decimal, ponto é milhar (ex: 1.250,50)
+        # Se tem ponto, verifica se é decimal ou milhar
+        if ',' in value_str:
+            # Formato BR: vírgula é decimal, ponto é milhar
+            # Remover pontos (milhares) e substituir vírgula por ponto (decimal)
+            value_str = value_str.replace('.', '').replace(',', '.')
+        elif '.' in value_str:
+            # Verificar se ponto é decimal ou milhar
+            parts = value_str.split('.')
+            if len(parts) == 2 and len(parts[1]) <= 2:
+                # Ponto é separador decimal (ex: 10.50)
+                value_str = value_str.replace(',', '')
+            else:
+                # Ponto é separador de milhar (ex: 1.250) - remover pontos
+                value_str = value_str.replace('.', '').replace(',', '')
+        else:
+            # Sem separador decimal, apenas número inteiro
+            value_str = value_str.replace(',', '').replace('.', '')
+        
+        try:
+            value = float(value_str)
+        except ValueError:
+            return match.group(0)  # Se não conseguir converter, retorna original
+        
+        # Separar parte inteira e decimal
+        integer_part = int(value)
+        decimal_part = int(round((value - integer_part) * 100))
+        
+        # Determinar moeda
+        if currency == 'BRL':
+            currency_singular = 'real'
+            currency_plural = 'reais'
+        else:  # USD
+            currency_singular = 'dólar'
+            currency_plural = 'dólares'
+        
+        parts = []
+        
+        # Parte inteira
+        if integer_part > 0:
+            int_text = number_to_text(integer_part)
+            if integer_part == 1:
+                parts.append(f"{int_text} {currency_singular}")
+            else:
+                parts.append(f"{int_text} {currency_plural}")
+        
+        # Parte decimal (centavos)
+        if decimal_part > 0:
+            cent_text = number_to_text(decimal_part)
+            if decimal_part == 1:
+                parts.append(f"{cent_text} centavo")
+            else:
+                parts.append(f"{cent_text} centavos")
+        
+        # Se não tem parte inteira, retornar apenas centavos
+        if integer_part == 0:
+            return parts[0] if parts else 'zero centavos'
+        
+        # Juntar com "e" se tem centavos
+        if decimal_part > 0:
+            return ' e '.join(parts)
+        else:
+            return parts[0]
+    
+    # Substituir valores em BRL
+    text = pattern_brl.sub(lambda m: convert_value(m, 'BRL'), text)
+    
+    # Substituir valores em USD
+    text = pattern_usd.sub(lambda m: convert_value(m, 'USD'), text)
+    
+    return text
+
+def validate_voice_ref_file(voice_path: Path) -> tuple[bool, Optional[str]]:
+    """
+    Valida arquivo de referência de voz
+    
+    Retorna: (is_valid, error_message)
+    """
+    if not voice_path.exists():
+        return False, f"Arquivo não encontrado: {voice_path}"
+    
+    # Verificar tamanho do arquivo
+    file_size = voice_path.stat().st_size
+    file_size_mb = file_size / (1024 * 1024)
+    
+    # Limite máximo: 50MB (arquivos muito grandes podem causar problemas)
+    MAX_SIZE_MB = 50
+    if file_size_mb > MAX_SIZE_MB:
+        return False, f"Arquivo muito grande: {file_size_mb:.2f}MB (máximo: {MAX_SIZE_MB}MB)"
+    
+    # Verificar duração do áudio (se possível)
+    try:
+        import librosa
+        duration = librosa.get_duration(path=str(voice_path))
+        
+        # Duração mínima: 3 segundos (XTTS v2 pode funcionar com menos, mas qualidade piora)
+        MIN_DURATION = 3
+        if duration < MIN_DURATION:
+            return False, f"Áudio muito curto: {duration:.2f}s (mínimo recomendado: {MIN_DURATION}s)"
+        
+        # Duração ideal: 6-30 segundos
+        IDEAL_MIN = 6
+        IDEAL_MAX = 30
+        if duration < IDEAL_MIN:
+            return True, f"⚠️ Áudio curto: {duration:.2f}s (ideal: {IDEAL_MIN}-{IDEAL_MAX}s)"
+        elif duration > IDEAL_MAX:
+            return True, f"⚠️ Áudio longo: {duration:.2f}s (ideal: {IDEAL_MIN}-{IDEAL_MAX}s, mas funciona)"
+        
+        return True, None
+    except ImportError:
+        # Se librosa não estiver disponível, apenas verificar tamanho
+        return True, None
+    except Exception as e:
+        # Se não conseguir ler duração, apenas avisar mas não bloquear
+        return True, f"⚠️ Não foi possível verificar duração: {str(e)}"
+
 def load_tts_model():
-    """Carrega o modelo TTS apenas uma vez (thread-safe)"""
+    """Carrega o modelo TTS XTTS v2 (para clonagem) apenas uma vez (thread-safe)"""
     global _tts_model, _TTS_READY
     
     with _model_lock:
         if _tts_model is not None:
             return _tts_model
         
-        print("🔄 Carregando modelo TTS...")
+        print("🔄 Carregando modelo TTS XTTS v2...")
         try:
             from TTS.api import TTS
             _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
-            print("✅ Modelo TTS carregado!")
+            print("✅ Modelo TTS XTTS v2 carregado!")
             _TTS_READY = True
         except Exception as e:
             print(f"⚠️ Erro ao carregar modelo TTS: {e}")
@@ -226,6 +502,46 @@ class GenerateAIResponse(BaseModel):
     model_config = {"protected_namespaces": ()}  # Resolver avisos do Pydantic
 
 
+class TextToSpeechRequest(BaseModel):
+    """Request model para Text-to-Speech com vozes modelo"""
+    text: str
+    voice_id: str  # ID da voz modelo (Vitoria, Camila, Ricardo, Ines, Cristiano)
+    language: Optional[str] = None  # Auto-detecta do voice_id se não fornecido
+    speed: Optional[float] = 0.95
+    return_base64: Optional[bool] = True  # Por padrão retorna base64
+    banned_words: Optional[str] = None  # Palavras banidas separadas por vírgula
+
+
+class TextToSpeechResponse(BaseModel):
+    """Response model para Text-to-Speech"""
+    success: bool
+    message: str
+    voice_id: Optional[str] = None
+    voice_name: Optional[str] = None
+    language: Optional[str] = None
+    base64: Optional[str] = None
+    filename: Optional[str] = None
+    filepath: Optional[str] = None
+    size_kb: Optional[float] = None
+    filtered_words: Optional[list] = None
+    filtered_text: Optional[str] = None
+
+
+class VoiceInfo(BaseModel):
+    """Informações de uma voz modelo"""
+    id: str
+    name: str
+    language: str
+    gender: str
+    available: bool
+
+
+class VoicesListResponse(BaseModel):
+    """Response model para listagem de vozes"""
+    success: bool
+    voices: list[VoiceInfo]
+
+
 @app.get("/")
 async def root():
     """Endpoint raiz"""
@@ -235,6 +551,8 @@ async def root():
             "endpoints": {
             "health": "/health",
             "generate": "/generate (POST) - Gerar áudio com clonagem",
+            "texttospeech": "/texttospeech (POST) - Text-to-Speech com vozes modelo",
+            "voices": "/voices (GET) - Listar vozes modelo disponíveis",
             "generateAI": "/generateAI (POST) - Gerar texto com IA",
             "transcribe": "/transcribe (POST)",
             "filter": "/filter (POST)",
@@ -253,6 +571,287 @@ async def health():
         "whisper_ready": _WHISPER_READY,
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.get("/voices", response_model=VoicesListResponse)
+async def list_voices(language: Optional[str] = None):
+    """
+    Lista vozes modelo disponíveis (usando XTTS v2 com clonagem)
+    
+    Args:
+        language: Filtrar por idioma (pt, en, etc.) - opcional
+    
+    Returns:
+        Lista de vozes modelo com informações de disponibilidade
+    """
+    voices_list = []
+    
+    for voice_id, voice_config in VOICE_MODELS.items():
+        # Filtrar por idioma se fornecido
+        if language and voice_config["language"] != language:
+            continue
+        
+        # Verificar se o arquivo de referência existe
+        voice_ref_path = get_voice_ref_path(voice_id)
+        available = voice_ref_path is not None and voice_ref_path.exists()
+        
+        voices_list.append(VoiceInfo(
+            id=voice_id,
+            name=voice_config["name"],
+            language=voice_config["language"],
+            gender=voice_config["gender"],
+            available=available
+        ))
+    
+    return VoicesListResponse(
+        success=True,
+        voices=voices_list
+    )
+
+
+@app.post("/texttospeech", response_model=TextToSpeechResponse)
+async def text_to_speech(request: TextToSpeechRequest):
+    """
+    Gerar áudio usando XTTS v2 com clonagem de voz
+    
+    Este endpoint permite usar vozes modelo (Vitoria, Camila, Ricardo, Ines, Cristiano)
+    usando XTTS v2 com clonagem de voz. Requer arquivos de referência para cada voz.
+    
+    Args:
+        request: TextToSpeechRequest com texto e voice_id
+    
+    Returns:
+        TextToSpeechResponse com áudio gerado (base64 ou arquivo)
+    """
+    # Carregar modelo XTTS v2
+    current_model = load_tts_model()
+    
+    if not _TTS_READY:
+        raise HTTPException(
+            status_code=503,
+            detail="TTS não está pronto. Verifique os logs."
+        )
+    
+    try:
+        # Verificar se a voz existe
+        if request.voice_id not in VOICE_MODELS:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Voz '{request.voice_id}' não encontrada. Vozes disponíveis: {', '.join(VOICE_MODELS.keys())}"
+            )
+        
+        # Obter configuração da voz e do modelo
+        voice_config = VOICE_MODELS.get(request.voice_id, {})
+        model_config = VOICE_MODEL_MAPPING.get(request.voice_id, {})
+        
+        if not model_config.get("use_xtts", False):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Voz '{request.voice_id}' não está configurada para usar XTTS v2"
+            )
+        
+        # Resolver voice_id para caminho do arquivo de referência
+        voice_ref_path = get_voice_ref_path(request.voice_id)
+        
+        if not voice_ref_path or not voice_ref_path.exists():
+            # Verificar se é uma voz modelo conhecida
+            if request.voice_id in VOICE_MODEL_MAPPING:
+                expected_path = model_config.get("voice_ref", "N/A")
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Arquivo de referência não encontrado para a voz '{request.voice_id}'. "
+                           f"Certifique-se de que o arquivo existe em: {expected_path}"
+                )
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Voz '{request.voice_id}' não encontrada. Vozes disponíveis: {', '.join(VOICE_MODELS.keys())}"
+                )
+        
+        # Limite máximo de caracteres no texto: 400 caracteres
+        MAX_CHARS = 400
+        if len(request.text) > MAX_CHARS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Texto muito longo: {len(request.text)} caracteres (máximo: {MAX_CHARS} caracteres). "
+                       f"Por favor, reduza o tamanho do texto."
+            )
+        
+        # XTTS v2 tem limite de 400 tokens por requisição
+        # Limite de 400 caracteres garante que não exceda 400 tokens
+        
+        # Validar arquivo de referência (tamanho, duração, etc.)
+        is_valid, validation_message = validate_voice_ref_file(voice_ref_path)
+        if not is_valid:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Arquivo de referência inválido para a voz '{request.voice_id}': {validation_message}"
+            )
+        elif validation_message:
+            # Aviso mas não bloqueia (ex: áudio curto mas ainda funciona)
+            print(f"   ⚠️ Aviso sobre arquivo de referência: {validation_message}")
+        
+        # Obter configuração da voz
+        voice_language = request.language or model_config.get("language", "pt")
+        
+        # Processar texto para normalização inteligente
+        # XTTS v2 pode ler pontuação literalmente (ex: "ponto" ao invés de pausa)
+        # Normalizamos o texto para evitar isso
+        text_processed = request.text
+        
+        # Nota: Validação de tamanho já foi feita acima (400 erro)
+        # Aqui apenas processamos o texto normalmente
+        
+        import re
+        
+        # 0. Converter valores monetários para texto por extenso
+        # Exemplo: "R$ 10,50" → "dez reais e cinquenta centavos"
+        text_processed = convert_money_to_text(text_processed)
+        
+        # 1. Remover emojis do texto
+        # Padrão para detectar emojis (Unicode ranges comuns de emojis)
+        emoji_pattern = re.compile(
+            "["
+            "\U0001F600-\U0001F64F"  # emoticons
+            "\U0001F300-\U0001F5FF"  # symbols & pictographs
+            "\U0001F680-\U0001F6FF"  # transport & map symbols
+            "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+            "\U00002702-\U000027B0"  # dingbats
+            "\U000024C2-\U0001F251"  # enclosed characters
+            "\U0001F900-\U0001F9FF"  # supplemental symbols and pictographs
+            "\U0001FA00-\U0001FA6F"  # chess symbols
+            "\U0001FA70-\U0001FAFF"  # symbols and pictographs extended-A
+            "\U00002600-\U000026FF"  # miscellaneous symbols
+            "\U00002700-\U000027BF"  # dingbats
+            "]+",
+            flags=re.UNICODE
+        )
+        text_processed = emoji_pattern.sub('', text_processed)
+        
+        # 1. Normalizar pontuação para evitar leitura literal
+        # Remover pontos finais que podem ser lidos como "ponto"
+        # Substituir por espaço (pausa natural) ou manter se necessário
+        # Padrão: ponto final seguido de espaço e letra minúscula (continuação de frase)
+        text_processed = re.sub(r'\.\s+([a-záàâãéêíóôõúç])', r' \1', text_processed, flags=re.IGNORECASE)
+        # Padrão: ponto final seguido de espaço e letra maiúscula (nova frase)
+        # Manter espaço maior para pausa natural
+        text_processed = re.sub(r'\.\s+([A-ZÁÀÂÃÉÊÍÓÔÕÚÇ])', r'. \1', text_processed)
+        # Padrão: ponto final no final do texto (remover)
+        text_processed = re.sub(r'\.\s*$', '', text_processed)
+        # Padrão: múltiplos pontos (ex: "...") - substituir por espaço
+        text_processed = re.sub(r'\.{2,}', ' ', text_processed)
+        
+        # 3. Substituir vírgulas após valores monetários por espaço (evita divisão)
+        # Exemplo: "10 Reais e 50 centavos," -> "10 Reais e 50 centavos "
+        # Padrão: vírgula após "centavos" ou "reais" seguido de espaço e letra maiúscula
+        text_processed = re.sub(r'(\d+\s*(?:reais|centavos)),\s*([A-Z])', r'\1 \2', text_processed, flags=re.IGNORECASE)
+        # Padrão: vírgula após valores monetários completos
+        text_processed = re.sub(r'(\d+\s*(?:reais|centavos)\s*(?:e\s*\d+\s*(?:centavos|reais))?),', r'\1', text_processed, flags=re.IGNORECASE)
+        
+        # 4. Limpar espaços múltiplos
+        text_processed = re.sub(r'\s+', ' ', text_processed)
+        text_processed = text_processed.strip()
+        
+        # Filtrar palavras banidas do texto se fornecido
+        text_for_response = text_processed
+        text_to_generate = text_processed
+        filtered_words_found = []
+        
+        if request.banned_words:
+            import re
+            words_to_filter = [word.strip() for word in request.banned_words.split(",") if word.strip()]
+            
+            for banned_word in words_to_filter:
+                pattern = re.compile(re.escape(banned_word), re.IGNORECASE)
+                matches_response = list(pattern.finditer(text_for_response))
+                matches_generate = list(pattern.finditer(text_to_generate))
+                
+                if matches_response:
+                    for match in reversed(matches_response):
+                        text_for_response = (
+                            text_for_response[:match.start()] + 
+                            "#" * len(match.group()) + 
+                            text_for_response[match.end():]
+                        )
+                    
+                    for match in reversed(matches_generate):
+                        text_to_generate = (
+                            text_to_generate[:match.start()] + 
+                            "Hashtag" + 
+                            text_to_generate[match.end():]
+                        )
+                        filtered_words_found.append(match.group())
+            
+            if filtered_words_found:
+                print(f"   🚫 Palavras filtradas: {filtered_words_found}")
+        
+        # Gerar nome de arquivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"tts_{request.voice_id.lower()}_{timestamp}.wav"
+        filepath = OUTPUT_DIR / filename
+        
+        print(f"\n🎤 Gerando áudio com XTTS v2 e clonagem de voz...")
+        print(f"   Texto: {text_to_generate[:50]}...")
+        print(f"   Voz: {request.voice_id} ({voice_config.get('name', 'N/A')})")
+        print(f"   Arquivo de referência: {voice_ref_path}")
+        print(f"   Idioma: {voice_language}")
+        
+        # Gerar áudio usando XTTS v2 com clonagem
+        # Texto já foi validado para ter no máximo 400 caracteres
+        current_model.tts_to_file(
+            text=text_to_generate,
+            speaker_wav=str(voice_ref_path),
+            language=voice_language,
+            file_path=str(filepath),
+            speed=request.speed
+        )
+        
+        # Verificar se foi criado
+        if not filepath.exists():
+            raise HTTPException(
+                status_code=500,
+                detail="Erro ao gerar áudio: arquivo não foi criado"
+            )
+        
+        size_kb = filepath.stat().st_size / 1024
+        
+        # Converter para base64 e limpar arquivo se solicitado
+        base64_audio = None
+        save_file = not request.return_base64
+        
+        if request.return_base64:
+            with open(filepath, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+                base64_audio = base64.b64encode(audio_bytes).decode('utf-8')
+            
+            # Limpar arquivo se foi pedido base64
+            filepath.unlink()
+            print(f"   📦 Áudio convertido para base64 (arquivo não salvo)")
+        
+        return TextToSpeechResponse(
+            success=True,
+            message=f"✅ Áudio gerado com sucesso usando voz '{request.voice_id}' (XTTS v2 com clonagem)",
+            voice_id=request.voice_id,
+            voice_name=voice_config.get("name", request.voice_id),
+            language=voice_language,
+            base64=base64_audio,
+            filename=filename if save_file else None,
+            filepath=str(filepath) if save_file else None,
+            size_kb=size_kb,
+            filtered_words=filtered_words_found if filtered_words_found else None,
+            filtered_text=text_for_response if filtered_words_found else None
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Erro ao gerar TTS: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao gerar áudio: {str(e)}"
+        )
 
 
 @app.post("/generate", response_model=AudioResponse)
